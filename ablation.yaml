@@ -1,0 +1,116 @@
+# Ablation runner config for LR/SR consistency fusion.
+# Usage examples:
+#   python ablation.py --config ablation.yaml --list
+#   python ablation.py --config ablation.yaml --ablation full --mode train
+#   python ablation.py --config ablation.yaml --ablation wo_texture --mode train
+#   python ablation.py --config ablation.yaml --ablation fixed_sr_to_lr --mode all
+#   python ablation.py --config ablation.yaml --ablation wo_texture --mode config
+#   python ablation.py --config ablation.yaml --ablation wo_texture --print_infer
+
+base:
+  # Base training yaml. This is loaded first; each ablation only overrides it.
+  config: config4_infer.yaml
+  train_script: train_consistency_fusion4.py
+  infer_script: infer_list.py
+  scoring_script: sr_consistency_score_overall5.py
+
+  # All generated configs, logs and ablated feature CSVs go under this root.
+  output_root: outputs/ablations
+
+  # If null, ablation.py uses paths.features_csv from base config.
+  base_features_csv: outputs/FAIM/
+
+# These overrides are applied to every ablation after loading base.config.
+# Put your best common training settings here.
+common_overrides:
+  loss:
+    type: same_image_plus_cross_image_rank_zscore
+    same_image_rank_weight: 1.0
+    cross_image_rank_weight: 1.0
+    zscore_reg_weight: 0.0
+    tie_threshold: 0.001
+    pred_temperature: 1.0
+  train:
+    epochs: 120
+    steps_per_epoch: 100
+    batch_size: 256
+    lr: 0.0001
+    weight_decay: 0.001
+    device: cuda
+    seed: 42
+    early_stop_patience: 20
+  model:
+    type: gated_residual
+    residual_alpha: 0.2
+  selection:
+    scope: per_dataset
+    part: part1
+    dataset: RealSR
+    metric: PLCC_logistic
+    mode: max
+
+# Branch ablations are implemented by generating an ablated features.csv:
+#   - disabled branch penalty column is kept but set to 0.0
+#   - branch-specific auxiliary feature columns are dropped
+# fixed_sr_to_lr changes first-stage semantic matching and therefore needs export/all.
+variants:
+  full:
+    description: "Full method: adaptive coarse-ref matching + all branches + residual calibration."
+    disabled_branches: []
+    disable_residual: false
+    semantic_ref_mode: fewer_valid_masks
+    feature_source: base
+
+  wo_lowfreq:
+    description: "Remove low-frequency structure consistency branch."
+    disabled_branches: [lowfreq]
+    disable_residual: false
+    semantic_ref_mode: fewer_valid_masks
+    feature_source: ablated_from_base
+
+  wo_semantic:
+    description: "Remove semantic correspondence branch."
+    disabled_branches: [semantic]
+    disable_residual: false
+    semantic_ref_mode: fewer_valid_masks
+    feature_source: ablated_from_base
+
+  wo_texture:
+    description: "Remove texture evidence branch."
+    disabled_branches: [texture]
+    disable_residual: false
+    semantic_ref_mode: fewer_valid_masks
+    feature_source: ablated_from_base
+
+  wo_unsupported:
+    description: "Remove unsupported / hallucination region branch."
+    disabled_branches: [unmatched]
+    disable_residual: false
+    semantic_ref_mode: fewer_valid_masks
+    feature_source: ablated_from_base
+
+  wo_residual:
+    description: "Remove residual calibration head; use simple gated branch fusion."
+    disabled_branches: []
+    disable_residual: true
+    semantic_ref_mode: fewer_valid_masks
+    feature_source: base
+    config_overrides:
+      model:
+        type: gated
+
+  fixed_sr_to_lr:
+    description: "Fixed SR-to-LR semantic matching; reuse adaptive rows where SR was already ref, recompute only rows where LR had fewer valid masks than SR."
+    disabled_branches: []
+    disable_residual: false
+    semantic_ref_mode: image2
+    feature_source: reuse_adaptive_then_export_missing
+    # This variant changes first-stage features only for rows where adaptive used LR as ref.
+    # Run --mode export or --mode all first. The wrapper seeds outputs/ablations/fixed_sr_to_lr/features.csv
+    # with reusable rows and export appends only missing recomputed rows.
+    config_overrides:
+      export:
+        skip_existing_features: true
+        overwrite_feature_csv: false
+        extra_scoring_args:
+          semantic_ref_mode: image2

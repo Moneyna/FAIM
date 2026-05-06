@@ -1,0 +1,132 @@
+data:
+  data_base: data/LQMetric
+  lr_method: Bicubic
+  image_ext: .png
+  methods:
+  - UPSR
+  - StableSR
+  - SeeSR
+  - CoSeR
+  - PASD
+  - DiT4SR
+  - HYPIR
+  - LucidFlux
+  splits:
+    train:
+    - part: part2
+      dataset: RealDeg
+    - part: part1
+      dataset: Real47
+    - part: part1
+      dataset: RealSRSet
+    val:
+    - part: part1
+      dataset: RealPhoto60
+    - part: part1
+      dataset: RealSR
+    #- part: part1
+    #  dataset: RealSRSet
+gt:
+  csv_path: mos_per_dataset_method_image_mos_only.csv
+  dataset_column: dataset
+  method_column: method
+  image_column: relative_image_name
+  label_column: consistency_ye_score
+  label_normalize: false
+  label_is_relative_only: true
+paths:
+  output_dir: outputs/FAIM
+  features_csv: outputs/FAIM/features.csv
+  resolved_config: outputs/FAIM/config_resolved.yaml
+export:
+  enabled: true
+  scoring_script: sr_consistency_score_overall5.py
+  repo_root: .
+  device: cuda
+  amp: true
+  save_debug: true
+  skip_existing_features: true
+  overwrite_feature_csv: false
+  continue_on_error: true
+  max_images: null
+  max_pairs: null
+  min_base_masks: 6
+  texture_spatial_radius: 2
+  empty_cache_each_pair: true
+  debug_subdir: pair_debug
+  flush_every: 1
+  extra_scoring_args:
+    batch_size: 128
+    nn_chunk_size: 4096
+    texture_nn_chunk_size: 4096
+split:
+  type: half_dataset_plus_extra_train
+  seed: 42
+  holdout:
+    part: part2
+    dataset: RealDeg
+    train_ratio: 0.5
+  extra_train:
+  - part: part1
+    dataset: Real47
+  - part: part1
+    dataset: RealSRSet
+  extra_val:
+  - part: part1
+    dataset: RealPhoto60
+  - part: part1
+    dataset: RealSR
+  #- part: part1
+  #  dataset: RealSRSet
+model:
+  type: gated_residual
+  hidden_dim: 64
+  mid_dim: 32
+  dropout: 0.1
+  residual_alpha: 0.2
+  score_clip: true
+features:
+  auto_select_numeric: true
+  columns: null
+  exclude_columns:
+  - consistency_score
+  - final_penalty
+  include_dataset_method_onehot: false
+  min_non_nan_ratio: 0.25
+  fill_nan_with_train_mean: true
+loss:
+  type: same_image_plus_cross_image_rank_zscore
+  tie_threshold: 0.001
+  pred_temperature: 1.0
+  same_image_rank_weight: 1.0
+  cross_image_rank_weight: 1.0
+  zscore_reg_weight: 0.0
+selection:
+  scope: per_dataset
+  part: part2 #1
+  dataset: RealDeg #RealPhoto60 #RealSR #RealSRSet #RealDeg
+  metric: SRCC #PLCC_logistic
+  mode: max
+train:
+  epochs: 120
+  steps_per_epoch: 100
+  batch_size: 256
+  lr: 0.00002
+  weight_decay: 0.001
+  num_workers: 0
+  device: cuda
+  seed: 42
+  early_stop_patience: 20 #1200
+  grad_clip_norm: 5.0
+  val_pair_mode: all
+  val_random_pairs: 4096
+  save_every_epoch: false
+outputs:
+  best_model: outputs/FAIM/best_model.pt #outputs/fusion4_realdeg_half_real47_train_realdeg_extval/best_model.pt
+  last_model: outputs/FAIM/last_model.pt #outputs/fusion4_realdeg_half_real47_train_realdeg_extval/last_model.pt
+  scaler: outputs/FAIM/scaler.pkl #outputs/fusion4_realdeg_half_real47_train_realdeg_extval/scaler.pkl
+  feature_columns: outputs/FAIM/feature_columns.json #outputs/fusion4_realdeg_half_real47_train_realdeg_extval/feature_columns.json
+  train_log: outputs/FAIM/train_log.csv #outputs/fusion4_realdeg_half_real47_train_realdeg_extval/train_log.csv
+  val_predictions: outputs/FAIM/val_predictions.csv #outputs/fusion4_realdeg_half_real47_train_realdeg_extval/val_predictions.csv
+  val_metrics: outputs/FAIM/val_metrics.json #outputs/fusion4_realdeg_half_real47_train_realdeg_extval/val_metrics.json
+  val_metrics_csv: outputs/FAIM/val_metrics.csv #outputs/fusion4_realdeg_half_real47_train_realdeg_extval/val_metrics.csv
